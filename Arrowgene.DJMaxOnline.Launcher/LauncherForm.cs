@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using System.Drawing.Drawing2D;
 using System.Net;
 using Arrowgene.DJMaxOnline.Updater;
@@ -42,6 +42,7 @@ internal sealed class LauncherForm : Form
     private readonly int _localeCodePage;
     private readonly string _localeName;
     private readonly string _localeProfile;
+    private readonly bool _passTicketArgs;
 
     private readonly ModernField _account = new();
     private readonly ModernField _password = new(password: true);
@@ -92,6 +93,7 @@ internal sealed class LauncherForm : Form
         _localeCodePage = config.LocaleCodePage;
         _localeName = config.LocaleName;
         _localeProfile = config.LocaleProfile;
+        _passTicketArgs = config.PassTicketArgs;
         _newsFileName = config.UpdateNews;
         // Web only: no local-folder fallback. Updates come from the server so every
         // player checks the same published hashes against the same published files.
@@ -910,7 +912,7 @@ internal sealed class LauncherForm : Form
             SaveCurrentConfig(showError: true);
             StartGame(gamePath, token, _windowed.Checked, SelectedResolution(),
                 _localeEmulator, _localeEmulatorArgs,
-                _localeCodePage, _localeName, _localeProfile);
+                _localeCodePage, _localeName, _localeProfile, _passTicketArgs);
             SetStatus($"Connected. Ticket expires in {response.ExpiresInSeconds}s.",
                 ModernTheme.Ok);
             closeAfterLaunch = true;
@@ -1013,10 +1015,13 @@ internal sealed class LauncherForm : Form
     private static void StartGame(
         string gamePath, string token, bool windowed, string resolution,
         string localeEmulator, string localeEmulatorArgs,
-        int localeCodePage, string localeName, string localeProfile)
+        int localeCodePage, string localeName, string localeProfile,
+        bool passTicketArgs)
     {
-        // sub_4B0C30 retains the third lpCmdLine argument when ConnectFromNM=0.
-        List<string> arguments = ["local", "ticket", token];
+        // sub_4B0C30 retains the third lpCmdLine argument when ConnectFromNM=0. The SNDA
+        // (china260) client has no such handling - passing it there makes WSAConnect fail
+        // (WSAEADDRNOTAVAIL) before any packet reaches the server. See PassTicketArgs.
+        List<string> arguments = passTicketArgs ? ["local", "ticket", token] : [];
 
         // -windowed and -scale: are both handled by dinput.dll, not by the client. It
         // ships with the update, but if it is absent neither flag would be read by
