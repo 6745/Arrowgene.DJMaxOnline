@@ -1,4 +1,4 @@
-﻿using System.Text;
+using System.Text;
 using Arrowgene.DJMaxOnline.Updater;
 
 namespace Arrowgene.DJMaxOnline.Launcher;
@@ -161,6 +161,31 @@ internal sealed class LauncherConfig
     /// </summary>
     public string LocaleName { get; set; } = "ko-KR";
 
+    /// <summary>
+    /// Whether the launcher appends <c>local ticket &lt;token&gt;</c> to the client's
+    /// command line.
+    ///
+    /// The korea400/japan400 clients read a third lpCmdLine argument when
+    /// ConnectFromNM=0 and use it as the launcher ticket (see StartGame). The SNDA
+    /// (china260) v2.5/v2.6 client does not: it has no such command-line handling, so
+    /// receiving these arguments makes WSAConnect fail with WSAEADDRNOTAVAIL (10049)
+    /// before any packet is sent - confirmed by Process Monitor showing zero TCP
+    /// activity from DJMax.exe when launched this way, and a clean connection when
+    /// launched with no arguments at all.
+    ///
+    /// With this false, the launcher starts the client with no ticket argument. The
+    /// account still gets resolved: DjMaxServer.LoginTicketService keeps the ticket
+    /// from the HTTP login the launcher just performed, and
+    /// LocalAccountResolver.TryResolveSoleLauncherSession binds the next
+    /// AuthenticateInSndAccReq that arrives without one - as long as it is the only
+    /// pending ticket. Launch the client promptly after login and do not log in a
+    /// second account before it connects, or the match becomes ambiguous and the
+    /// server rejects it ("no unambiguous launcher session").
+    ///
+    /// True (the default) preserves the existing korea400/japan400 behavior.
+    /// </summary>
+    public bool PassTicketArgs { get; set; } = true;
+
     public static string DefaultPath => Path.Combine(AppContext.BaseDirectory, FileName);
 
     public static LauncherConfig Load(string path)
@@ -256,6 +281,10 @@ internal sealed class LauncherConfig
                 case "updatenews":
                     config.UpdateNews = value.Trim();
                     break;
+                case "passticketargs":
+                    config.PassTicketArgs =
+                        !bool.TryParse(value.Trim(), out bool pass) || pass;
+                    break;
             }
         }
 
@@ -350,7 +379,16 @@ internal sealed class LauncherConfig
             $"localeEmulatorArgs={LocaleEmulatorArgs}",
             $"localeProfile={LocaleProfile}",
             $"localeCodePage={LocaleCodePage}",
-            $"localeName={LocaleName}"
+            $"localeName={LocaleName}",
+            string.Empty,
+            "# Whether the launcher appends \"local ticket <token>\" to the client's",
+            "# command line. The korea400/japan400 clients expect this. The SNDA",
+            "# (china260) v2.5/v2.6 client does not - it has no handling for a third",
+            "# command-line argument, and receiving one makes WSAConnect fail before any",
+            "# packet is sent. Set to false for an SNDA client: the launcher then starts",
+            "# it with no arguments, and the server matches the connection to the account",
+            "# from the HTTP login ticket instead (see PassTicketArgs in LauncherConfig.cs).",
+            $"passTicketArgs={PassTicketArgs.ToString().ToLowerInvariant()}"
         ];
         if (SaveCredentials)
         {
